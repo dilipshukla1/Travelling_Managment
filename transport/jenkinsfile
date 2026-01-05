@@ -1,0 +1,44 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_IMAGE = "yourdockerhubusername/travelling-php:latest"
+        DOCKER_CREDENTIALS = "dockerhub-credentials"
+        GIT_REPO = "https://github.com/dilipshukla1/Travelling_Managment.git"
+        GIT_BRANCH = "main"
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                git branch: "${GIT_BRANCH}", url: "${GIT_REPO}"
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    docker.build("${DOCKER_IMAGE}")
+                }
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                script {
+                    docker.withRegistry('https://index.docker.io/v1/', "${DOCKER_CREDENTIALS}") {
+                        docker.image("${DOCKER_IMAGE}").push()
+                    }
+                }
+            }
+        }
+
+        stage('Notify') {
+            steps {
+                echo "✅ CI completed: Docker image ready for Kubernetes deployment"
+            }
+        }
+    }
+}
+
