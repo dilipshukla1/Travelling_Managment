@@ -6,12 +6,42 @@ pipeline {
         IMAGE_NAME     = "travelling-php"
         IMAGE_TAG      = "latest"
         FULL_IMAGE     = "${DOCKERHUB_USER}/${IMAGE_NAME}:${IMAGE_TAG}"
+        SONAR_PROJECT  = "travelling-php"
     }
 
     stages {
+
         stage('Checkout Code') {
             steps {
                 checkout scm
+            }
+        }
+
+        stage('SonarQube Code Scan') {
+            steps {
+                withSonarQubeEnv('sonarqube') {
+                    sh '''
+                      sonar-scanner \
+                      -Dsonar.projectKey=${SONAR_PROJECT} \
+                      -Dsonar.sources=.
+                    '''
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 2, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        stage('Trivy Filesystem Scan') {
+            steps {
+                sh '''
+                  trivy fs --exit-code 1 --severity HIGH,CRITICAL .
+                '''
             }
         }
 
@@ -19,6 +49,14 @@ pipeline {
             steps {
                 sh '''
                   docker build -t ${FULL_IMAGE} .
+                '''
+            }
+        }
+
+        stage('Trivy Image Scan') {
+            steps {
+                sh '''
+                  trivy image --exit-code 1 --severity HIGH,CRITICAL ${FULL_IMAGE}
                 '''
             }
         }
@@ -48,10 +86,11 @@ pipeline {
 
     post {
         success {
-            echo "Docker image built and pushed successfully"
+            echo "✅ Code scanned, image scanned, and pushed successfully"
         }
         failure {
-            echo "Pipeline failed"
+            echo "❌ Pipeline failed due to quality or security issues"
         }
     }
 }
+
