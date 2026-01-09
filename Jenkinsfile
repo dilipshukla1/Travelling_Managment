@@ -19,16 +19,22 @@ pipeline {
         }
 
         stage('SonarQube Code Scan') {
-            steps {
-                withSonarQubeEnv('sonarqube') {
-                    sh '''
-                      sonar-scanner \
-                      -Dsonar.projectKey=${SONAR_PROJECT} \
-                      -Dsonar.sources=.
-                    '''
-                }
-            }
+    steps {
+        withSonarQubeEnv('sonarqube') {
+            sh '''
+              docker run --rm \
+                -e SONAR_HOST_URL=$SONAR_HOST_URL \
+                -e SONAR_LOGIN=$SONAR_AUTH_TOKEN \
+                -v "$PWD:/usr/src" \
+                sonarsource/sonar-scanner-cli \
+                -Dsonar.projectKey=travelling-php \
+                -Dsonar.sources=.
+            '''
         }
+    }
+}
+
+    
 
         stage('Quality Gate') {
             steps {
