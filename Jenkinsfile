@@ -1,4 +1,3 @@
-
 pipeline {
     agent any
 
@@ -10,35 +9,35 @@ pipeline {
         SONAR_PROJECT  = "travelling-php"
     }
 
+    options {
+        disableConcurrentBuilds()
+        timestamps()
+    }
+
     stages {
 
-        stage('Checkout Code') {
+        /* Jenkins automatically checks out SCM
+           DO NOT add checkout scm again */
+
+        stage('SonarQube Code Scan') {
             steps {
-                checkout scm
+                withSonarQubeEnv('sonarqube') {
+                    sh '''
+                    docker run --rm \
+                      -e SONAR_HOST_URL=$SONAR_HOST_URL \
+                      -e SONAR_LOGIN=$SONAR_AUTH_TOKEN \
+                      -v $WORKSPACE:/usr/src \
+                      sonarsource/sonar-scanner-cli \
+                      -Dsonar.projectKey=${SONAR_PROJECT} \
+                      -Dsonar.sources=.
+                    '''
+                }
             }
         }
 
-        stage('SonarQube Code Scan') {
-    steps {
-        withSonarQubeEnv('sonarqube') {
-            sh '''
-              docker run --rm \
-                -e SONAR_HOST_URL=$SONAR_HOST_URL \
-                -e SONAR_LOGIN=$SONAR_AUTH_TOKEN \
-                -v "$PWD:/usr/src" \
-                sonarsource/sonar-scanner-cli \
-                -Dsonar.projectKey=travelling-php \
-                -Dsonar.sources=.
-            '''
-        }
-    }
-}
-
-    
-
         stage('Quality Gate') {
             steps {
-                timeout(time: 2, unit: 'MINUTES') {
+                timeout(time: 3, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
             }
@@ -47,7 +46,7 @@ pipeline {
         stage('Trivy Filesystem Scan') {
             steps {
                 sh '''
-                  trivy fs --exit-code 1 --severity HIGH,CRITICAL .
+                trivy fs --exit-code 1 --severity HIGH,CRITICAL .
                 '''
             }
         }
@@ -55,7 +54,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 sh '''
-                  docker build -t ${FULL_IMAGE} .
+                docker build -t ${FULL_IMAGE} .
                 '''
             }
         }
@@ -63,7 +62,7 @@ pipeline {
         stage('Trivy Image Scan') {
             steps {
                 sh '''
-                  trivy image --exit-code 1 --severity HIGH,CRITICAL ${FULL_IMAGE}
+                trivy image --exit-code 1 --severity HIGH,CRITICAL ${FULL_IMAGE}
                 '''
             }
         }
@@ -76,7 +75,7 @@ pipeline {
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
                     sh '''
-                      echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
                     '''
                 }
             }
@@ -85,7 +84,7 @@ pipeline {
         stage('Push Image to DockerHub') {
             steps {
                 sh '''
-                  docker push ${FULL_IMAGE}
+                docker push ${FULL_IMAGE}
                 '''
             }
         }
@@ -93,10 +92,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ Code scanned, image scanned, and pushed successfully"
+            echo "✅ CI/CD pipeline completed successfully"
         }
         failure {
-            echo "❌ Pipeline failed due to quality or security issues"
+            echo "❌ Pipeline failed — check logs"
         }
     }
 }
